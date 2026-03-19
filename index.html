@@ -1006,8 +1006,8 @@
     let lastRenderedIdx = -1;
     let prevMinuteKey   = null;
 
-    const mkOf   = ts => Math.floor(ts / 60000);          // unix-minute key
-    const slotOf = ts => Math.floor((ts % 60000) / 1000); // 0–59
+    const mkOf   = ts => Math.floor(ts / 60000);             // unix-minute key
+    const slotOf = ts => Math.floor((ts % 60000) / itvMs);  // 0–(blocksPerRow-1)
 
     function fmtMinute(mk) {
       return new Date(mk * 60000)
@@ -1031,7 +1031,8 @@
       trackEl.className = 'row-track';
 
       const blockEls = [];
-      for (let i = 0; i < 60; i++) {
+      const blocksPerRow = Math.round(60000 / itvMs);
+      for (let i = 0; i < blocksPerRow; i++) {
         const b = document.createElement('div');
         b.className = 'block b-pending';
         trackEl.appendChild(b);
@@ -1259,8 +1260,18 @@
       }
     }
 
+    function rebuildChart() {
+      minuteRows.forEach(({ rowEl }) => rowEl.remove());
+      minuteRows.clear();
+      lastRenderedIdx = -1;
+      prevMinuteKey   = null;
+      chartEmpty.style.display = '';
+      refreshChart();
+    }
+
     intervalSel.addEventListener('change', e => {
       itvMs = Number(e.target.value);
+      rebuildChart();
       startScheduler();
     });
 
