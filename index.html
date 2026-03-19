@@ -613,6 +613,91 @@
     }
 
     /* ═══════════════════════════════════════════
+       SERVERS PANEL
+    ═══════════════════════════════════════════ */
+    .servers-panel {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .servers-panel[hidden] { display: none; }
+
+    .server-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--t2);
+    }
+
+    .server-row input[type="checkbox"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .server-label { flex: 1; font-family: inherit; }
+
+    .servers-add {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .servers-input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--t1);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 8px;
+      outline: none;
+    }
+
+    .servers-input:focus { border-color: var(--accent); }
+    .servers-input[placeholder="Name"] { width: 90px; }
+    .servers-input[placeholder="IP address"] { flex: 1; }
+
+    .servers-footer {
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    .btn-link {
+      background: none;
+      border: none;
+      color: var(--t3);
+      font-family: inherit;
+      font-size: 10px;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .btn-link:hover { color: var(--t2); }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      color: var(--t3);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 2px;
+      line-height: 1;
+    }
+
+    .btn-icon:hover { color: var(--red); }
+
+    /* ═══════════════════════════════════════════
        RESPONSIVE
     ═══════════════════════════════════════════ */
     @media (max-width: 600px) {
@@ -697,6 +782,20 @@
           <option value="30000">30s</option>
           <option value="60000">60s</option>
         </select>
+        <button class="btn" id="serversBtn">Servers</button>
+      </div>
+    </div>
+
+    <!-- ── Servers panel ──────────────────────── -->
+    <div class="servers-panel" id="serversPanel" hidden>
+      <div class="servers-list" id="serversList"></div>
+      <div class="servers-add">
+        <input class="servers-input" id="addName" placeholder="Name" maxlength="20" />
+        <input class="servers-input" id="addIp"   placeholder="IP address" maxlength="45" />
+        <button class="btn" id="addBtn">Add</button>
+      </div>
+      <div class="servers-footer">
+        <button class="btn-link" id="resetEndpointsBtn">Reset to defaults</button>
       </div>
     </div>
 
@@ -743,14 +842,28 @@
     /* ───────────────────────────────────────────────────────────────
        CONFIG
     ─────────────────────────────────────────────────────────────── */
-    const ENDPOINTS = [
-      { name: 'Cloudflare', ip: '1.1.1.1'  },
-      { name: 'Cloudflare', ip: '1.0.0.1'  },
-      { name: 'Google',     ip: '8.8.8.8'  },
-      { name: 'Google',     ip: '8.8.4.4'  },
-      { name: 'Quad9',      ip: '9.9.9.9'        },
-      { name: 'Quad9',      ip: '149.112.112.112' },
+    const DEFAULT_ENDPOINTS = [
+      { name: 'Cloudflare', ip: '1.1.1.1',          enabled: true, custom: false },
+      { name: 'Cloudflare', ip: '1.0.0.1',          enabled: true, custom: false },
+      { name: 'Google',     ip: '8.8.8.8',          enabled: true, custom: false },
+      { name: 'Google',     ip: '8.8.4.4',          enabled: true, custom: false },
+      { name: 'Quad9',      ip: '9.9.9.9',          enabled: true, custom: false },
+      { name: 'Quad9',      ip: '149.112.112.112',  enabled: true, custom: false },
     ];
+
+    function loadEndpoints() {
+      try {
+        const saved = localStorage.getItem('dns-mon-endpoints');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      return DEFAULT_ENDPOINTS.map(e => ({ ...e }));
+    }
+
+    function saveEndpoints() {
+      localStorage.setItem('dns-mon-endpoints', JSON.stringify(endpoints));
+    }
+
+    let endpoints = loadEndpoints();
     const TIMEOUT_MS   = 3000;
     const BAR_SCALE_MS = 300; // latency that fills the bar to 100 %
     const MAX_ROWS     = 20;  // keep last 20 minutes of rows
@@ -786,7 +899,14 @@
     const ttEndpoint   = q('ttEndpoint');
     const ttStatus     = q('ttStatus');
     const ttLatency    = q('ttLatency');
-    const themeBtn     = q('themeBtn');
+    const themeBtn          = q('themeBtn');
+    const serversBtn        = q('serversBtn');
+    const serversPanel      = q('serversPanel');
+    const serversList       = q('serversList');
+    const addName           = q('addName');
+    const addIp             = q('addIp');
+    const addBtn            = q('addBtn');
+    const resetEndpointsBtn = q('resetEndpointsBtn');
 
     /* ───────────────────────────────────────────────────────────────
        THEME
@@ -1075,8 +1195,10 @@
        PING
     ─────────────────────────────────────────────────────────────── */
     async function doPing() {
-      const ep  = ENDPOINTS[epIdx];
-      epIdx     = (epIdx + 1) % ENDPOINTS.length;
+      const active = endpoints.filter(e => e.enabled);
+      if (active.length === 0) return;
+      const ep = active[epIdx % active.length];
+      epIdx    = (epIdx + 1) % active.length;
       refreshEndpointLabel(ep);
 
       const url  = `https://${ep.ip}/dns-query?name=${rndLabel()}.test.&type=A`;
@@ -1140,6 +1262,81 @@
     intervalSel.addEventListener('change', e => {
       itvMs = Number(e.target.value);
       startScheduler();
+    });
+
+    /* ───────────────────────────────────────────────────────────────
+       SERVERS PANEL
+    ─────────────────────────────────────────────────────────────── */
+    function renderServersList() {
+      serversList.innerHTML = '';
+      const active = endpoints.filter(e => e.enabled);
+      endpoints.forEach((ep, i) => {
+        const row = document.createElement('div');
+        row.className = 'server-row';
+
+        const cb = document.createElement('input');
+        cb.type    = 'checkbox';
+        cb.checked = ep.enabled;
+        cb.disabled = ep.enabled && active.length === 1; // prevent disabling last
+        cb.addEventListener('change', () => {
+          endpoints[i].enabled = cb.checked;
+          epIdx = 0;
+          saveEndpoints();
+          renderServersList();
+        });
+
+        const label = document.createElement('span');
+        label.className = 'server-label';
+        label.textContent = `${ep.name}  ${ep.ip}`;
+
+        row.appendChild(cb);
+        row.appendChild(label);
+
+        if (ep.custom) {
+          const del = document.createElement('button');
+          del.className   = 'btn-icon';
+          del.textContent = '×';
+          del.title = 'Remove';
+          del.addEventListener('click', () => {
+            endpoints.splice(i, 1);
+            epIdx = 0;
+            saveEndpoints();
+            renderServersList();
+          });
+          row.appendChild(del);
+        }
+
+        serversList.appendChild(row);
+      });
+    }
+
+    serversBtn.addEventListener('click', () => {
+      const open = serversPanel.hidden;
+      if (open) {
+        renderServersList();
+        serversPanel.hidden = false;
+      } else {
+        serversPanel.hidden = true;
+      }
+    });
+
+    addBtn.addEventListener('click', () => {
+      const name = addName.value.trim();
+      const ip   = addIp.value.trim();
+      if (!name || !ip) return;
+      if (!/^[\d.a-fA-F:]+$/.test(ip)) return;
+      endpoints.push({ name, ip, enabled: true, custom: true });
+      saveEndpoints();
+      renderServersList();
+      addName.value = '';
+      addIp.value   = '';
+    });
+
+    resetEndpointsBtn.addEventListener('click', () => {
+      endpoints = DEFAULT_ENDPOINTS.map(e => ({ ...e }));
+      epIdx = 0;
+      saveEndpoints();
+      renderServersList();
     });
 
     /* ───────────────────────────────────────────────────────────────
