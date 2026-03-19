@@ -2,7 +2,7 @@
 
 A single-page internet connectivity monitor that measures real-time latency and packet loss by timing DNS-over-HTTPS requests. No backend, no build step, no dependencies — just one `index.html` file.
 
-![dark theme screenshot placeholder](https://placehold.co/800x400/06080d/38bdf8?text=DNS+Uptime+Monitor)
+![DNS Uptime Monitor screenshot](screenshot.png)
 
 ## What it does
 
