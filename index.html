@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNS Uptime Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════ */
+    :root {
+      --bg:          #06080d;
+      --bg-surface:  #0b0f18;
+      --bg-raised:   #111824;
+      --border:      #1e2d3e;
+      --border-hi:   #2c3f52;
+
+      --t1: #d8e8f4;
+      --t2: #5c7a94;
+      --t3: #4a6478;
+
+      --accent:     #38bdf8;
+      --accent-dim: rgba(56, 189, 248, 0.07);
+
+      --green:        #4ade80;
+      --green-dim:    rgba(74, 222, 128, 0.08);
+      --green-edge:   rgba(74, 222, 128, 0.22);
+      --red:          #f87171;
+      --red-dim:      rgba(248, 113, 113, 0.08);
+      --red-edge:     rgba(248, 113, 113, 0.22);
+      --amber:        #fbbf24;
+      --amber-dim:    rgba(251, 191, 36, 0.08);
+      --amber-edge:   rgba(251, 191, 36, 0.22);
+      --pending-fill: #0c1520;
+
+      --grid: rgba(56, 189, 248, 0.035);
+    }
+
+    [data-theme="light"] {
+      --bg:          #eef2f7;
+      --bg-surface:  #ffffff;
+      --bg-raised:   #e5eaf2;
+      --border:      #d8e0ea;
+      --border-hi:   #bfcad8;
+
+      --t1: #0c1a28;
+      --t2: #3d5a72;
+      --t3: #8aa3b8;
+
+      --accent:     #0284c7;
+      --accent-dim: rgba(2, 132, 199, 0.07);
+
+      --green:        #16a34a;
+      --green-dim:    rgba(22, 163, 74, 0.07);
+      --green-edge:   rgba(22, 163, 74, 0.22);
+      --red:          #dc2626;
+      --red-dim:      rgba(220, 38, 38, 0.07);
+      --red-edge:     rgba(220, 38, 38, 0.22);
+      --amber:        #d97706;
+      --amber-dim:    rgba(217, 119, 6, 0.07);
+      --amber-edge:   rgba(217, 119, 6, 0.22);
+      --pending-fill: #dde5ef;
+
+      --grid: rgba(2, 132, 199, 0.045);
+    }
+
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      background: var(--bg);
+      color: var(--t1);
+      min-height: 100vh;
+    }
+
+    body {
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ═══════════════════════════════════════════
+       LAYOUT
+    ═══════════════════════════════════════════ */
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 30px 20px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Fade-up on load */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+    .app > * {
+      animation: fade-up 0.5s ease both;
+    }
+    .app > *:nth-child(1) { animation-delay:   0ms; }
+    .app > *:nth-child(2) { animation-delay:  55ms; }
+    .app > *:nth-child(3) { animation-delay: 110ms; }
+    .app > *:nth-child(4) { animation-delay: 165ms; }
+    .app > *:nth-child(5) { animation-delay: 220ms; }
+    .app > *:nth-child(6) { animation-delay: 275ms; }
+    .app > *:nth-child(7) { animation-delay: 330ms; }
+
+    /* ═══════════════════════════════════════════
+       HEADER
+    ═══════════════════════════════════════════ */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.38em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .brand-sub {
+      font-size: 9px;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      color: var(--t3);
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Live indicator */
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 5px 11px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      color: var(--t2);
+      text-transform: uppercase;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.8s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1;   }
+      50%       { opacity: 0.2; }
+    }
+
+    /* Button */
+    .btn {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      color: var(--t2);
+      cursor: pointer;
+      padding: 5px 13px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      transition: border-color 0.2s, color 0.2s;
+      line-height: 1.6;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ═══════════════════════════════════════════
+       STATUS PANEL
+    ═══════════════════════════════════════════ */
+    .status-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.5s;
+    }
+
+    /* Colour bar on left edge */
+    .status-panel::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--bar-color, var(--t3));
+      transition: background 0.5s;
+    }
+
+    /* Corner marker */
+    .status-panel::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 0; height: 0;
+      border-style: solid;
+      border-width: 0 20px 20px 0;
+      border-color: transparent var(--bar-color, var(--t3)) transparent transparent;
+      opacity: 0.35;
+      transition: border-color 0.5s;
+    }
+
+    .status-panel.s-online   { --bar-color: var(--green); border-color: var(--green-edge); }
+    .status-panel.s-degraded { --bar-color: var(--amber); border-color: var(--amber-edge); }
+    .status-panel.s-offline  { --bar-color: var(--red);   border-color: var(--red-edge);   }
+
+    .status-eyebrow {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 10px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .status-orb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--bar-color, var(--t3));
+      flex-shrink: 0;
+      transition: background 0.5s;
+    }
+
+    .status-panel.s-online .status-orb,
+    .status-panel.s-degraded .status-orb {
+      animation: orb-ring 2.4s ease-in-out infinite;
+    }
+
+    @keyframes orb-ring {
+      0%, 100% { box-shadow: 0 0 0 0px var(--bar-color); }
+      50%       { box-shadow: 0 0 0 5px transparent;      }
+    }
+
+    .status-headline {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--bar-color, var(--t3));
+      transition: color 0.5s;
+    }
+
+    /* ═══════════════════════════════════════════
+       STATS GRID
+    ═══════════════════════════════════════════ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+    }
+
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 13px 16px 11px;
+    }
+
+    .stat-lbl {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 9px;
+    }
+
+    .stat-val {
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--t1);
+      line-height: 1;
+    }
+
+    .stat-val .unit {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--t3);
+      margin-left: 1px;
+    }
+
+    .v-green  { color: var(--green) !important; }
+    .v-amber  { color: var(--amber) !important; }
+    .v-red    { color: var(--red)   !important; }
+    .v-accent { color: var(--accent)!important; }
+
+    /* ═══════════════════════════════════════════
+       CONTROLS
+    ═══════════════════════════════════════════ */
+    .controls {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .endpoint-lbl {
+      font-size: 11px;
+      color: var(--t2);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .endpoint-lbl .hl  { color: var(--accent); font-weight: 600; }
+    .endpoint-lbl .dim { color: var(--t3); }
+
+    .controls-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .ctrl-lbl {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--t3);
+      white-space: nowrap;
+    }
+
+    .select {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      color: var(--t1);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 28px 4px 9px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235c7a94'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    .select:hover, .select:focus { border-color: var(--accent); }
+
+    /* ═══════════════════════════════════════════
+       CHART PANEL
+    ═══════════════════════════════════════════ */
+    .chart-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 15px 18px 18px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .chart-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--t3);
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--t3);
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    /* Multi-row chart */
+    .chart-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .chart-empty {
+      padding: 28px 0;
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: var(--t3);
+      text-transform: uppercase;
+    }
+
+    .chart-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .row-label {
+      width: 38px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--t3);
+      text-align: right;
+      flex-shrink: 0;
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .row-label.is-now { color: var(--accent); }
+
+    .row-track {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      gap: 1px;
+      height: 26px;
+    }
+
+    /* Accent left edge on the current in-progress row */
+    .chart-row.is-current .row-track {
+      border-left: 2px solid var(--accent);
+      padding-left: 3px;
+    }
+
+    .block {
+      flex: 1 1 0;
+      min-width: 0;
+      position: relative;
+      border-radius: 1px;
+      overflow: hidden;
+      transition: transform 0.12s, opacity 0.12s;
+    }
+
+    .block:not(.b-pending) {
+      cursor: pointer;
+    }
+
+    .block:not(.b-pending):hover {
+      transform: scaleY(1.07);
+      transform-origin: bottom center;
+      opacity: 0.82;
+      z-index: 5;
+    }
+
+    /* Block states */
+    .b-pending { background: var(--pending-fill); }
+
+    .b-success {
+      background: var(--green-dim);
+      border: 1px solid var(--green-edge);
+    }
+
+    .b-timeout {
+      background: var(--red-dim);
+      border: 1px solid var(--red-edge);
+    }
+
+    .b-offline {
+      background: var(--amber-dim);
+      border: 1px solid var(--amber-edge);
+    }
+
+    /* New block entrance */
+    @keyframes block-in {
+      from { transform: scaleY(0.4); opacity: 0.3; }
+      to   { transform: scaleY(1);   opacity: 1;   }
+    }
+
+    .block.just-born {
+      animation: block-in 0.22s ease-out both;
+      transform-origin: bottom center;
+    }
+
+    /* ═══════════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════════ */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 2px 1px 0;
+    }
+
+    /* ═══════════════════════════════════════════
+       TOOLTIP
+    ═══════════════════════════════════════════ */
+    .tooltip {
+      position: fixed;
+      z-index: 9999;
+      background: var(--bg-raised);
+      border: 1px solid var(--border-hi);
+      padding: 11px 15px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s;
+      white-space: nowrap;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    }
+
+    [data-theme="light"] .tooltip {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+    }
+
+    .tooltip.show { opacity: 1; }
+
+    .tt-time {
+      font-size: 10px;
+      color: var(--t3);
+      letter-spacing: 0.08em;
+      margin-bottom: 5px;
+    }
+
+    .tt-endpoint {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 6px;
+    }
+
+    .tt-status {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .tt-latency {
+      font-size: 11px;
+      color: var(--t2);
+    }
+
+    /* ═══════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════ */
+    @media (max-width: 600px) {
+      .stats-grid   { grid-template-columns: repeat(3, 1fr); }
+      .legend       { display: none; }
+      .brand-sub    { display: none; }
+      .status-headline { font-size: 18px; }
+    }
+
+    @media (max-width: 400px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .controls   { flex-wrap: wrap; }
+    }
+
+    @media (max-width: 340px) {
+      .row-label { width: 28px; font-size: 8px; }
+      .row-track { gap: 0px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── Header ─────────────────────────────────── -->
+    <div class="header">
+      <div class="brand">
+        <div class="brand-name">DNS Uptime Monitor</div>
+        <div class="brand-sub">Network Latency &amp; Packet Loss</div>
+      </div>
+      <div class="header-right">
+        <div class="live-badge">
+          <div class="live-dot"></div>
+          Live
+        </div>
+        <button class="btn" id="themeBtn" aria-label="Toggle colour theme">☀ Light</button>
+      </div>
+    </div>
+
+    <!-- ── Status panel ───────────────────────────── -->
+    <div class="status-panel" id="statusPanel">
+      <div class="status-eyebrow">Internet Status</div>
+      <div class="status-row">
+        <div class="status-orb" id="statusOrb"></div>
+        <div class="status-headline" id="statusText">Initializing</div>
+      </div>
+    </div>
+
+    <!-- ── Stats ──────────────────────────────────── -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-lbl">Last RTT</div>
+        <div class="stat-val" id="sLast">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Min RTT</div>
+        <div class="stat-val v-green" id="sMin">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Max RTT</div>
+        <div class="stat-val v-amber" id="sMax">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Avg RTT</div>
+        <div class="stat-val v-accent" id="sAvg">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Packet Loss</div>
+        <div class="stat-val" id="sLoss">—</div>
+      </div>
+    </div>
+
+    <!-- ── Controls ───────────────────────────────── -->
+    <div class="controls">
+      <div class="endpoint-lbl" id="endpointLbl">Waiting to start…</div>
+      <div class="controls-right">
+        <span class="ctrl-lbl">Interval</span>
+        <select class="select" id="intervalSel" aria-label="Ping interval">
+          <option value="1000"  selected>1s</option>
+          <option value="2000" >2s</option>
+          <option value="5000" >5s</option>
+          <option value="10000">10s</option>
+          <option value="30000">30s</option>
+          <option value="60000">60s</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Chart ──────────────────────────────────── -->
+    <div class="chart-panel">
+      <div class="chart-header">
+        <div class="chart-title">Ping History · By Minute</div>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:var(--green)"></div>Success
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:var(--red)"></div>Timeout
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:var(--amber)"></div>Offline
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:var(--pending-fill)"></div>Pending
+          </div>
+        </div>
+      </div>
+      <div class="chart-rows" id="chartRows">
+        <div class="chart-empty" id="chartEmpty">Monitoring will appear here…</div>
+      </div>
+    </div>
+
+    <!-- ── Footer ─────────────────────────────────── -->
+    <div class="footer">
+      <div id="pingCounter">0 pings sent</div>
+      <div>DoH · Cloudflare · Google · Quad9</div>
+    </div>
+
+  </div>
+
+  <!-- Tooltip (portal-style, outside .app) -->
+  <div class="tooltip" id="tooltip" role="tooltip" aria-hidden="true">
+    <div class="tt-time"     id="ttTime"></div>
+    <div class="tt-endpoint" id="ttEndpoint"></div>
+    <div class="tt-status"   id="ttStatus"></div>
+    <div class="tt-latency"  id="ttLatency"></div>
+  </div>
+
+  <script>
+    'use strict';
+
+    /* ───────────────────────────────────────────────────────────────
+       CONFIG
+    ─────────────────────────────────────────────────────────────── */
+    const ENDPOINTS = [
+      { name: 'Cloudflare', ip: '1.1.1.1'  },
+      { name: 'Cloudflare', ip: '1.0.0.1'  },
+      { name: 'Google',     ip: '8.8.8.8'  },
+      { name: 'Google',     ip: '8.8.4.4'  },
+      { name: 'Quad9',      ip: '9.9.9.9'        },
+      { name: 'Quad9',      ip: '149.112.112.112' },
+    ];
+    const TIMEOUT_MS   = 3000;
+    const BAR_SCALE_MS = 300; // latency that fills the bar to 100 %
+    const MAX_ROWS     = 20;  // keep last 20 minutes of rows
+
+    /* ───────────────────────────────────────────────────────────────
+       STATE
+    ─────────────────────────────────────────────────────────────── */
+    // pings array is never truncated so block indices stay stable
+    let pings  = [];  // { ts, status:'success'|'timeout'|'offline', lat:ms|null, ep }
+    let stats  = { min: Infinity, max: -Infinity, sum: 0, n: 0, lost: 0, total: 0 };
+    let epIdx  = 0;
+    let itvMs  = 1000;
+    let timer  = null;
+
+    /* ───────────────────────────────────────────────────────────────
+       DOM REFS
+    ─────────────────────────────────────────────────────────────── */
+    const q = id => document.getElementById(id);
+    const statusPanel  = q('statusPanel');
+    const statusText   = q('statusText');
+    const sLast        = q('sLast');
+    const sMin         = q('sMin');
+    const sMax         = q('sMax');
+    const sAvg         = q('sAvg');
+    const sLoss        = q('sLoss');
+    const endpointLbl  = q('endpointLbl');
+    const intervalSel  = q('intervalSel');
+    const chartRows    = q('chartRows');
+    const chartEmpty   = q('chartEmpty');
+    const pingCounter  = q('pingCounter');
+    const tooltip      = q('tooltip');
+    const ttTime       = q('ttTime');
+    const ttEndpoint   = q('ttEndpoint');
+    const ttStatus     = q('ttStatus');
+    const ttLatency    = q('ttLatency');
+    const themeBtn     = q('themeBtn');
+
+    /* ───────────────────────────────────────────────────────────────
+       THEME
+    ─────────────────────────────────────────────────────────────── */
+    function setTheme(t) {
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('dns-mon-theme', t);
+      themeBtn.textContent = t === 'dark' ? '☀ Light' : '◑ Dark';
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('dns-mon-theme');
+      const sys   = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      setTheme(saved || sys);
+    }
+
+    themeBtn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme');
+      setTheme(cur === 'dark' ? 'light' : 'dark');
+    });
+
+    /* ───────────────────────────────────────────────────────────────
+       UTILITIES
+    ─────────────────────────────────────────────────────────────── */
+    const rndLabel = () => Math.random().toString(36).slice(2, 10);
+
+    function fmtMs(ms) {
+      if (ms == null) return '—';
+      return `${Math.round(ms)}<span class="unit">ms</span>`;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       STATUS
+    ─────────────────────────────────────────────────────────────── */
+    function computeStatus() {
+      if (stats.total === 0) return 'init';
+      // Offline: last ≥3 consecutive pings all failed
+      const tail = pings.slice(-5);
+      if (tail.length >= 3 && tail.every(p => p.status !== 'success')) return 'offline';
+      // Degraded: >40% loss in last 10 pings (min 5 samples)
+      const recent = pings.slice(-10);
+      if (recent.length >= 5) {
+        const loss = recent.filter(p => p.status !== 'success').length / recent.length;
+        if (loss > 0.4) return 'degraded';
+      }
+      return 'online';
+    }
+
+    function refreshStatus() {
+      const s = computeStatus();
+      const map = {
+        init:     { cls: '',           text: 'Initializing', icon: '○' },
+        online:   { cls: 's-online',   text: 'Online',       icon: '●' },
+        degraded: { cls: 's-degraded', text: 'Experiencing Issues', icon: '◐' },
+        offline:  { cls: 's-offline',  text: 'Offline',      icon: '○' },
+      };
+      const { cls, text, icon } = map[s];
+      statusPanel.className = 'status-panel' + (cls ? ' ' + cls : '');
+      statusText.textContent = text;
+      document.title = `${icon} DNS Uptime Monitor`;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       STATS UI
+    ─────────────────────────────────────────────────────────────── */
+    function refreshStats(last) {
+      // Last RTT
+      if (last.lat != null) {
+        sLast.innerHTML = fmtMs(last.lat);
+        sLast.className = 'stat-val';
+      } else {
+        sLast.innerHTML = 'Lost';
+        sLast.className = 'stat-val v-red';
+      }
+      // Min / Max / Avg
+      if (stats.n > 0) {
+        sMin.innerHTML = fmtMs(stats.min);
+        sMax.innerHTML = fmtMs(stats.max);
+        sAvg.innerHTML = fmtMs(stats.sum / stats.n);
+      }
+      // Packet loss
+      if (stats.total > 0) {
+        const pct = (stats.lost / stats.total) * 100;
+        sLoss.innerHTML = `${pct.toFixed(1)}<span class="unit">%</span>`;
+        sLoss.className = 'stat-val' +
+          (pct === 0 ? ' v-green' : pct < 10 ? ' v-amber' : ' v-red');
+      }
+      // Counter
+      const t = stats.total;
+      pingCounter.textContent = `${t} ping${t !== 1 ? 's' : ''} sent`;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       CHART  (one row per calendar minute, newest on top)
+    ─────────────────────────────────────────────────────────────── */
+    const minuteRows    = new Map(); // minuteKey → { rowEl, blockEls, labelEl }
+    let lastRenderedIdx = -1;
+    let prevMinuteKey   = null;
+
+    const mkOf   = ts => Math.floor(ts / 60000);          // unix-minute key
+    const slotOf = ts => Math.floor((ts % 60000) / 1000); // 0–59
+
+    function fmtMinute(mk) {
+      return new Date(mk * 60000)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function ensureRow(mk) {
+      if (minuteRows.has(mk)) return minuteRows.get(mk);
+
+      // Build row element
+      const rowEl   = document.createElement('div');
+      rowEl.className   = 'chart-row';
+      rowEl.dataset.mk  = mk;
+
+      const labelEl = document.createElement('div');
+      labelEl.className   = 'row-label';
+      labelEl.textContent = fmtMinute(mk);
+      rowEl.appendChild(labelEl);
+
+      const trackEl = document.createElement('div');
+      trackEl.className = 'row-track';
+
+      const blockEls = [];
+      for (let i = 0; i < 60; i++) {
+        const b = document.createElement('div');
+        b.className = 'block b-pending';
+        trackEl.appendChild(b);
+        blockEls.push(b);
+      }
+      rowEl.appendChild(trackEl);
+
+      // Prepend so newest minute is always at the top
+      chartRows.insertBefore(rowEl, chartRows.firstChild);
+
+      // Hide the empty-state placeholder once we have a real row
+      chartEmpty.style.display = 'none';
+
+      minuteRows.set(mk, { rowEl, blockEls, labelEl });
+
+      // Prune oldest row when over the limit
+      if (minuteRows.size > MAX_ROWS) {
+        let oldest = Infinity;
+        for (const k of minuteRows.keys()) if (k < oldest) oldest = k;
+        const old = minuteRows.get(oldest);
+        if (old) { old.rowEl.remove(); minuteRows.delete(oldest); }
+      }
+
+      return minuteRows.get(mk);
+    }
+
+    // Colour stops: bright green (fast) → dark green (slow)
+    const LAT_STOPS = [
+      { ms:   0, r: 134, g: 239, b: 172 }, // #86efac
+      { ms:  50, r:  74, g: 222, b: 128 }, // #4ade80
+      { ms: 100, r:  34, g: 197, b:  94 }, // #22c55e
+      { ms: 200, r:  22, g: 163, b:  74 }, // #16a34a
+      { ms: 300, r:  20, g:  83, b:  45 }, // #14532d
+    ];
+
+    function latencyColor(ms) {
+      if (ms <= LAT_STOPS[0].ms) {
+        const s = LAT_STOPS[0];
+        return `rgb(${s.r},${s.g},${s.b})`;
+      }
+      const last = LAT_STOPS[LAT_STOPS.length - 1];
+      if (ms >= last.ms) return `rgb(${last.r},${last.g},${last.b})`;
+
+      let lo, hi;
+      for (let i = 0; i < LAT_STOPS.length - 1; i++) {
+        if (ms >= LAT_STOPS[i].ms && ms <= LAT_STOPS[i + 1].ms) {
+          lo = LAT_STOPS[i]; hi = LAT_STOPS[i + 1]; break;
+        }
+      }
+      const t = (ms - lo.ms) / (hi.ms - lo.ms);
+      return `rgb(${Math.round(lo.r+(hi.r-lo.r)*t)},${Math.round(lo.g+(hi.g-lo.g)*t)},${Math.round(lo.b+(hi.b-lo.b)*t)})`;
+    }
+
+    function paintBlock(blockEl, p) {
+      blockEl.className  = 'block b-' + p.status;
+      blockEl.dataset.ts = p.ts;
+      blockEl.dataset.st = p.status;
+      blockEl.dataset.lt = p.lat ?? '';
+      blockEl.dataset.ep = p.ep ? `${p.ep.name} (${p.ep.ip})` : '';
+
+      if (p.status === 'success' && p.lat != null) {
+        blockEl.style.background   = latencyColor(p.lat);
+        blockEl.style.borderColor  = 'transparent';
+        blockEl.innerHTML = '';
+      } else {
+        blockEl.style.background  = '';
+        blockEl.style.borderColor = '';
+        blockEl.innerHTML = '';
+      }
+
+      blockEl.classList.add('just-born');
+      blockEl.addEventListener('animationend',
+        () => blockEl.classList.remove('just-born'), { once: true });
+    }
+
+    function refreshChart() {
+      const curMk = mkOf(Date.now());
+
+      // Process only pings added since last render (O(1) per call)
+      for (let i = lastRenderedIdx + 1; i < pings.length; i++) {
+        const p  = pings[i];
+        const mk = mkOf(p.ts);
+        const { blockEls } = ensureRow(mk);
+        paintBlock(blockEls[slotOf(p.ts)], p);
+        lastRenderedIdx = i;
+      }
+
+      // Update is-current / is-now styling when the minute rolls over
+      if (prevMinuteKey !== curMk) {
+        if (prevMinuteKey != null) {
+          const old = minuteRows.get(prevMinuteKey);
+          if (old) {
+            old.rowEl.classList.remove('is-current');
+            old.labelEl.classList.remove('is-now');
+          }
+        }
+        prevMinuteKey = curMk;
+      }
+      const cur = minuteRows.get(curMk);
+      if (cur) {
+        cur.rowEl.classList.add('is-current');
+        cur.labelEl.classList.add('is-now');
+      }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       TOOLTIP
+    ─────────────────────────────────────────────────────────────── */
+    let mx = 0, my = 0;
+
+    function placeTooltip() {
+      const tw = tooltip.offsetWidth;
+      const th = tooltip.offsetHeight;
+      let x = mx + 16;
+      let y = my - th - 12;
+      if (x + tw > window.innerWidth  - 8) x = mx - tw - 16;
+      if (y < 8)                           y = my + 16;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top  = y + 'px';
+    }
+
+    document.addEventListener('mousemove', e => {
+      mx = e.clientX;
+      my = e.clientY;
+      if (tooltip.classList.contains('show')) placeTooltip();
+    });
+
+    chartRows.addEventListener('mouseover', e => {
+      const node = e.target.closest('.block');
+      if (!node || !node.dataset.ts) { tooltip.classList.remove('show'); return; }
+
+      const d   = new Date(Number(node.dataset.ts));
+      const s   = node.dataset.st;
+      const lat = node.dataset.lt;
+
+      const colors = { success: 'var(--green)', timeout: 'var(--red)', offline: 'var(--amber)' };
+      const labels = { success: 'Success', timeout: 'Timeout', offline: 'No Connection' };
+
+      ttTime.textContent     = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      ttEndpoint.textContent = node.dataset.ep || '';
+      ttStatus.textContent   = labels[s] || s;
+      ttStatus.style.color   = colors[s] || 'var(--t2)';
+      ttLatency.textContent  = lat ? `${Math.round(Number(lat))} ms RTT` : '';
+
+      tooltip.classList.add('show');
+      placeTooltip();
+    });
+
+    chartRows.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+
+    /* ───────────────────────────────────────────────────────────────
+       ENDPOINT LABEL
+    ─────────────────────────────────────────────────────────────── */
+    function refreshEndpointLabel(ep) {
+      endpointLbl.innerHTML =
+        `Pinging <span class="hl">${ep.name}</span> ` +
+        `<span class="dim">(${ep.ip})</span>`;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       PING
+    ─────────────────────────────────────────────────────────────── */
+    async function doPing() {
+      const ep  = ENDPOINTS[epIdx];
+      epIdx     = (epIdx + 1) % ENDPOINTS.length;
+      refreshEndpointLabel(ep);
+
+      const url  = `https://${ep.ip}/dns-query?name=${rndLabel()}.test.&type=A`;
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+      const t0   = performance.now();
+      let entry;
+
+      try {
+        await fetch(url, {
+          signal:  ctrl.signal,
+          headers: { 'Accept': 'application/dns-json' },
+        });
+        clearTimeout(tid);
+        const lat = performance.now() - t0;
+        entry = { ts: Date.now(), status: 'success', lat, ep };
+        stats.min  = Math.min(stats.min, lat);
+        stats.max  = Math.max(stats.max, lat);
+        stats.sum += lat;
+        stats.n++;
+      } catch (err) {
+        clearTimeout(tid);
+        entry = {
+          ts:     Date.now(),
+          status: err.name === 'AbortError' ? 'timeout' : 'offline',
+          lat:    null,
+          ep,
+        };
+        stats.lost++;
+      }
+
+      stats.total++;
+      pings.push(entry);
+
+      refreshStatus();
+      refreshStats(entry);
+      refreshChart();
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       SCHEDULER  (fixed-cadence: fires every itvMs on the clock,
+                   skips a tick if the previous ping is still in-flight)
+    ─────────────────────────────────────────────────────────────── */
+    let pingInFlight = false;
+
+    function startScheduler() {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        if (pingInFlight) return;   // previous ping still running — skip tick
+        pingInFlight = true;
+        doPing().finally(() => { pingInFlight = false; });
+      }, itvMs);
+      // Fire immediately rather than waiting one full interval
+      if (!pingInFlight) {
+        pingInFlight = true;
+        doPing().finally(() => { pingInFlight = false; });
+      }
+    }
+
+    intervalSel.addEventListener('change', e => {
+      itvMs = Number(e.target.value);
+      startScheduler();
+    });
+
+    /* ───────────────────────────────────────────────────────────────
+       BOOT
+    ─────────────────────────────────────────────────────────────── */
+    initTheme();
+    startScheduler();
+  </script>
+</body>
+</html>
