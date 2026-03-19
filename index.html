@@ -518,7 +518,7 @@
     }
 
     /* Block states */
-    .b-pending { background: var(--pending-fill); }
+    .b-pending { background: transparent; border: 1px solid rgba(255,255,255,0.03); }
 
     .b-success {
       background: var(--green-dim);
@@ -712,9 +712,6 @@
           </div>
           <div class="legend-item">
             <div class="legend-swatch" style="background:var(--amber)"></div>Offline
-          </div>
-          <div class="legend-item">
-            <div class="legend-swatch" style="background:var(--pending-fill)"></div>Pending
           </div>
         </div>
       </div>
@@ -1085,6 +1082,7 @@
       const ctrl = new AbortController();
       const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       const t0   = performance.now();
+      const ts   = Date.now();
       let entry;
 
       try {
@@ -1094,7 +1092,7 @@
         });
         clearTimeout(tid);
         const lat = performance.now() - t0;
-        entry = { ts: Date.now(), status: 'success', lat, ep };
+        entry = { ts, status: 'success', lat, ep };
         stats.min  = Math.min(stats.min, lat);
         stats.max  = Math.max(stats.max, lat);
         stats.sum += lat;
@@ -1102,7 +1100,7 @@
       } catch (err) {
         clearTimeout(tid);
         entry = {
-          ts:     Date.now(),
+          ts,
           status: err.name === 'AbortError' ? 'timeout' : 'offline',
           lat:    null,
           ep,
