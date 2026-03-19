@@ -489,12 +489,13 @@
       display: flex;
       gap: 1px;
       height: 26px;
+      border-left: 2px solid transparent;
+      padding-left: 3px;
     }
 
     /* Accent left edge on the current in-progress row */
     .chart-row.is-current .row-track {
-      border-left: 2px solid var(--accent);
-      padding-left: 3px;
+      border-left-color: var(--accent);
     }
 
     .block {
