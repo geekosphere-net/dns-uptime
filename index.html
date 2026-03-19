@@ -823,7 +823,7 @@
     <!-- ── Footer ─────────────────────────────────── -->
     <div class="footer">
       <div id="pingCounter">0 pings sent</div>
-      <div>DoH · Cloudflare · Google · Quad9</div>
+      <div>DoH · Cloudflare · Google</div>
     </div>
 
   </div>
@@ -847,8 +847,6 @@
       { name: 'Cloudflare', ip: '1.0.0.1',         path: '/dns-query',                            enabled: true, custom: false },
       { name: 'Google',     ip: '8.8.8.8',         path: '/resolve',                              enabled: true, custom: false },
       { name: 'Google',     ip: '8.8.4.4',         path: '/resolve',                              enabled: true, custom: false },
-      { name: 'Quad9',      ip: '9.9.9.9',         path: '/dns-query', host: 'dns.quad9.net',     enabled: true, custom: false },
-      { name: 'Quad9',      ip: '149.112.112.112', path: '/dns-query', host: 'dns.quad9.net',     enabled: true, custom: false },
     ];
 
     function loadEndpoints() {
@@ -942,6 +940,7 @@
        UTILITIES
     ─────────────────────────────────────────────────────────────── */
     const rndLabel = () => Math.random().toString(36).slice(2, 10);
+
 
     function fmtMs(ms) {
       if (ms == null) return '—';
@@ -1212,7 +1211,8 @@
       epIdx    = (epIdx + 1) % active.length;
       refreshEndpointLabel(ep);
 
-      const url  = `https://${ep.host || ep.ip}${ep.path || '/dns-query'}?name=${rndLabel()}.test.&type=A`;
+      const url    = `https://${ep.host || ep.ip}${ep.path || '/dns-query'}?name=${rndLabel()}.test.&type=A`;
+      const accept = 'application/dns-json';
       const ctrl = new AbortController();
       const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       const t0   = performance.now();
@@ -1222,7 +1222,7 @@
       try {
         await fetch(url, {
           signal:  ctrl.signal,
-          headers: { 'Accept': 'application/dns-json' },
+          headers: { 'Accept': accept },
         });
         clearTimeout(tid);
         const lat = performance.now() - t0;
