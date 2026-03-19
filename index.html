@@ -843,18 +843,28 @@
        CONFIG
     ─────────────────────────────────────────────────────────────── */
     const DEFAULT_ENDPOINTS = [
-      { name: 'Cloudflare', ip: '1.1.1.1',          enabled: true, custom: false },
-      { name: 'Cloudflare', ip: '1.0.0.1',          enabled: true, custom: false },
-      { name: 'Google',     ip: '8.8.8.8',          enabled: true, custom: false },
-      { name: 'Google',     ip: '8.8.4.4',          enabled: true, custom: false },
-      { name: 'Quad9',      ip: '9.9.9.9',          enabled: true, custom: false },
-      { name: 'Quad9',      ip: '149.112.112.112',  enabled: true, custom: false },
+      { name: 'Cloudflare', ip: '1.1.1.1',         path: '/dns-query',                            enabled: true, custom: false },
+      { name: 'Cloudflare', ip: '1.0.0.1',         path: '/dns-query',                            enabled: true, custom: false },
+      { name: 'Google',     ip: '8.8.8.8',         path: '/resolve',                              enabled: true, custom: false },
+      { name: 'Google',     ip: '8.8.4.4',         path: '/resolve',                              enabled: true, custom: false },
+      { name: 'Quad9',      ip: '9.9.9.9',         path: '/dns-query', host: 'dns.quad9.net',     enabled: true, custom: false },
+      { name: 'Quad9',      ip: '149.112.112.112', path: '/dns-query', host: 'dns.quad9.net',     enabled: true, custom: false },
     ];
 
     function loadEndpoints() {
       try {
         const saved = localStorage.getItem('dns-mon-endpoints');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Merge saved enabled state onto fresh defaults (preserves path/host fixes),
+          // then append any custom entries the user added.
+          const merged = DEFAULT_ENDPOINTS.map(def => {
+            const match = parsed.find(s => !s.custom && s.ip === def.ip);
+            return { ...def, enabled: match ? match.enabled : def.enabled };
+          });
+          const customs = parsed.filter(s => s.custom);
+          return [...merged, ...customs];
+        }
       } catch {}
       return DEFAULT_ENDPOINTS.map(e => ({ ...e }));
     }
@@ -1202,7 +1212,7 @@
       epIdx    = (epIdx + 1) % active.length;
       refreshEndpointLabel(ep);
 
-      const url  = `https://${ep.ip}/dns-query?name=${rndLabel()}.test.&type=A`;
+      const url  = `https://${ep.host || ep.ip}${ep.path || '/dns-query'}?name=${rndLabel()}.test.&type=A`;
       const ctrl = new AbortController();
       const tid  = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       const t0   = performance.now();
